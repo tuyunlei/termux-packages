@@ -28,13 +28,12 @@ jobs:
       - name: Free disk space
         run: ./scripts/free-space.sh
 
-      - name: Enable zram
-        uses: ./.github/actions/zram
-        with:
-          algorithm: zstd
-          size: 16G
-          priority: 100
-          device_name: /dev/zram0
+      # No zram here. ./.github/actions/zram compiles the module on the
+      # runner, which needs kernel headers that aren't installed; upstream
+      # only gets away with it because its Actions cache already holds a
+      # prebuilt module, and caches don't cross repos. The default package
+      # set is small enough not to need the extra swap. Revisit when adding
+      # memory-hungry packages like libllvm.
 
       - name: Load builder image
         run: ./scripts/run-docker.sh true
