@@ -51,6 +51,11 @@ jobs:
         run: |
           ./scripts/run-docker.sh bash -c '
             set -eu
+            # ANDROID_HOME and JAVA_HOME only exist after sourcing
+            # properties.sh; docker exec is not a login shell.
+            cd /home/builder/termux-packages
+            . ./scripts/properties.sh
+            echo "ANDROID_HOME=${ANDROID_HOME:?unset after sourcing properties.sh}"
             if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
               SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
             else
