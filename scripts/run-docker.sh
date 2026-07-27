@@ -92,7 +92,13 @@ if [ "$UNAME" = Darwin ]; then
 	SEC_OPT=""
 else
 	REPOROOT="$(dirname $(readlink -f $0))/../"
-	SEC_OPT=" --security-opt seccomp=$REPOROOT/scripts/profile.json --security-opt apparmor=_custom-termux-package-builder-$CONTAINER_NAME --cap-add CAP_SYS_ADMIN --device /dev/fuse"
+	# LOCAL PATCH (termux/termux-packages#29118): AppArmor + CAP_SYS_ADMIN +
+	# /dev/fuse were added for fuse-overlayfs, which breaks the termux-am
+	# build. We disable the overlayfs path in termux_setup_toolchain_29.sh,
+	# so these are dropped too. seccomp is kept. This lowers the container's
+	# security boundary -- acceptable only because we build known open source
+	# in a throwaway CI runner. Revisit if upstream fixes #29118.
+	SEC_OPT=" --security-opt seccomp=$REPOROOT/scripts/profile.json"
 fi
 
 if [ "${CI:-}" = "true" ]; then
@@ -138,6 +144,10 @@ if [ -z "$APPARMOR_PARSER" ] || ! $SUDO aa-status --enabled; then
 	echo "         Avoid executing untrusted code in the container"
 	APPARMOR_PARSER=""
 fi
+# LOCAL PATCH (termux/termux-packages#29118): force AppArmor profiles off.
+# On a Linux runner apparmor_parser exists, so without this the restricted
+# profile still loads and termux-am's Gradle build fails.
+APPARMOR_PARSER=""
 
 load_apparmor_profile() {
 	local profile_path="$1"

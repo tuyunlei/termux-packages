@@ -133,7 +133,13 @@ termux_setup_toolchain_29() {
 	[ -d "${TERMUX_STANDALONE_TOOLCHAIN}-work" ] || mkdir -p "${TERMUX_STANDALONE_TOOLCHAIN}-work"
 
 
-	if ! mountpoint -q "${TERMUX_STANDALONE_TOOLCHAIN}"; then
+	# LOCAL PATCH (termux/termux-packages#29118): fuse-overlayfs here breaks
+	# termux-am's Gradle build -- sdkmanager fails with "Failed to read or
+	# create install properties file" and android-33/build-tools 30.0.3 never
+	# install. Upstream never hits it because its CI pulls a prebuilt
+	# termux-am deb via -I; we must rebuild termux-am because it compiles
+	# TERMUX_APP_PACKAGE into FakeContext.java. Copy the toolchain instead.
+	if false; then
 		fuse-overlayfs \
 			"${TERMUX_STANDALONE_TOOLCHAIN}" \
 			-o lowerdir="${NDK}/toolchains/llvm/prebuilt/linux-x86_64" \
@@ -145,12 +151,17 @@ termux_setup_toolchain_29() {
 		return
 	fi
 
+	rm -rf "${TERMUX_STANDALONE_TOOLCHAIN}"
+
 	local _NDK_ARCHNAME=$TERMUX_ARCH
 	if [ "$TERMUX_ARCH" = "aarch64" ]; then
 		_NDK_ARCHNAME=arm64
 	elif [ "$TERMUX_ARCH" = "i686" ]; then
 		_NDK_ARCHNAME=x86
 	fi
+	cp -r "$NDK/toolchains/llvm/prebuilt/linux-x86_64" "${TERMUX_STANDALONE_TOOLCHAIN}"
+	cp "$NDK/source.properties" "${TERMUX_STANDALONE_TOOLCHAIN}"
+
 	# Remove android-support header wrapping not needed on android-21:
 	rm -Rf $TERMUX_STANDALONE_TOOLCHAIN/sysroot/usr/local
 
