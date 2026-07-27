@@ -42,6 +42,25 @@ jobs:
         run: |
           echo "cores=$(nproc)"; free -h; df -h / /mnt 2>/dev/null | tail -3
 
+      # termux-am is built with Gradle and wants android-33 + build-tools
+      # 30.0.3, but setup-android-sdk.sh only installs android-35/28/24.
+      # Upstream never hits this because its CI pulls a prebuilt termux-am
+      # deb with -I; we can't, since termux-am compiles TERMUX_APP_PACKAGE
+      # into FakeContext.java and must be rebuilt for our package name.
+      - name: Install SDK components needed by termux-am
+        run: |
+          ./scripts/run-docker.sh bash -c '
+            set -eu
+            if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+              SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+            else
+              SDKMANAGER="$ANDROID_HOME/cmdline-tools/bin/sdkmanager"
+            fi
+            yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses > /dev/null
+            yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
+              "platforms;android-33" "build-tools;30.0.3"
+          '
+
       # Deliberately no -f: it expands an unset var into `rm -f /*` (upstream bug).
       - name: Build bootstrap
         timeout-minutes: 320
@@ -59,6 +78,18 @@ jobs:
         if: always()
         run: df -h / /mnt 2>/dev/null | tail -3
 
+      # Tarred first: deb filenames carry an epoch (ca-certificates-java_1:...)
+      # and upload-artifact rejects colons outright.
+      - name: Pack built debs
+        if: always()
+        run: |
+          if [ -d output ] && [ -n "$(ls -A output 2>/dev/null)" ]; then
+            tar cf debs-aarch64.tar -C output .
+            echo "packed $(ls output | wc -l) files"
+          else
+            echo "no debs to pack"
+          fi
+
       # Uploaded even on timeout/failure so a partial run can be resumed
       # instead of rebuilt from scratch.
       - name: Store built debs
@@ -66,7 +97,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: debs-aarch64-${{ github.run_id }}
-          path: output/*.deb
+          path: debs-aarch64.tar
           if-no-files-found: warn
 
       - name: Store bootstrap archive
