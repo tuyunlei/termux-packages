@@ -429,7 +429,14 @@ main() {
 
 		# Core utilities.
 		PACKAGES+=("bash") # Used by `termux-bootstrap-second-stage.sh`
-		PACKAGES+=("bzip2")
+		# LOCAL PATCH: upstream lists "bzip2", but packages/bzip2/build.sh does
+		# not exist -- bzip2 is a subpackage of libbz2. --add and this array
+		# take build directory names, so "bzip2" aborts the run with "No
+		# package bzip2 found in any of the enabled repositories". Upstream
+		# never sees it because its CI uses generate-bootstraps.sh instead.
+		# extract_debs() unpacks every deb produced, so the bzip2 subpackage
+		# still lands in the bootstrap.
+		PACKAGES+=("libbz2")
 		if ! ${BOOTSTRAP_ANDROID10_COMPATIBLE}; then
 			PACKAGES+=("command-not-found")
 		else
