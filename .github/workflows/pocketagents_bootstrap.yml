@@ -1,0 +1,78 @@
+name: Build pocket-agents bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      add_packages:
+        description: "Extra packages for --add (comma separated). Empty = default set only."
+        required: false
+        default: ""
+
+permissions: {}
+
+jobs:
+  build:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git clone
+        uses: actions/checkout@v7
+
+      - name: Verify package name is ours
+        run: |
+          grep -n '^TERMUX_APP__PACKAGE_NAME=' scripts/properties.sh
+          grep -q '^TERMUX_APP__PACKAGE_NAME="com.pocketagents"' scripts/properties.sh \
+            || { echo "properties.sh does not carry our package name"; exit 1; }
+
+      - name: Free disk space
+        run: ./scripts/free-space.sh
+
+      - name: Enable zram
+        uses: ./.github/actions/zram
+        with:
+          algorithm: zstd
+          size: 16G
+          priority: 100
+          device_name: /dev/zram0
+
+      - name: Load builder image
+        run: ./scripts/run-docker.sh true
+
+      - name: Report starting resources
+        run: |
+          echo "cores=$(nproc)"; free -h; df -h / /mnt 2>/dev/null | tail -3
+
+      # Deliberately no -f: it expands an unset var into `rm -f /*` (upstream bug).
+      - name: Build bootstrap
+        timeout-minutes: 320
+        run: |
+          set -o pipefail
+          if [ -n "${{ inputs.add_packages }}" ]; then
+            ./scripts/run-docker.sh ./scripts/build-bootstraps.sh \
+              --architectures aarch64 --add "${{ inputs.add_packages }}"
+          else
+            ./scripts/run-docker.sh ./scripts/build-bootstraps.sh \
+              --architectures aarch64
+          fi
+
+      - name: Report finishing resources
+        if: always()
+        run: df -h / /mnt 2>/dev/null | tail -3
+
+      # Uploaded even on timeout/failure so a partial run can be resumed
+      # instead of rebuilt from scratch.
+      - name: Store built debs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: debs-aarch64-${{ github.run_id }}
+          path: output/*.deb
+          if-no-files-found: warn
+
+      - name: Store bootstrap archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: bootstrap-aarch64-${{ github.run_id }}
+          path: "*.zip"
+          if-no-files-found: error
